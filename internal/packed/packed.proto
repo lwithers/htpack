@@ -1,0 +1,59 @@
+syntax = "proto3";
+
+package packed;
+
+// Header at start of file. This must be a fixed, known size. Fields cannot
+// be zero.
+message Header {
+	// Magic number, used to quickly detect misconfigured systems or
+	// corrupted files.
+	fixed64 magic = 1;
+
+	// Version of file.
+	fixed64 version = 2;
+
+	// DirectoryOffset is the byte offset from the start of the file at
+	// which the Directory object may be found.
+	fixed64 directory_offset = 3;
+
+	// DirectoryLength is the byte length of the serialised Directory
+	// object.
+	fixed64 directory_length = 4;
+}
+
+// Directory of available files.
+message Directory {
+	// Files available within this pack. The key is the path of the URL to
+	// serve, and the value describes the file associated with that path.
+	map<string, File> files = 1;
+}
+
+// File that can be served.
+message File {
+	// ContentType of the file, copied directly into the "Content-Type" header.
+	string content_type = 1;
+
+	// Etag of the file (includes double quotes). Remembered by the browser
+	// and used to preempt responses if it is unmodified between resource get
+	// requests.
+	string etag = 2;
+
+	// Uncompressed version of the file.
+	FileData uncompressed = 3;
+
+	// Gzip compressed version of the file.
+	FileData gzip = 4;
+
+	// Brotli compressed version of the file.
+	FileData brotli = 5;
+}
+
+// FileData records the position of the file data within the pack.
+message FileData {
+	// Offset is the start of the file, in bytes relative to the start of
+	// the pack.
+	fixed64 offset = 1;
+
+	// Length is the 
+	fixed64 length = 2;
+}
