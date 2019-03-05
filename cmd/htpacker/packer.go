@@ -37,6 +37,7 @@ type packInfo struct {
 	offset, len uint64
 }
 
+// Pack a file.
 func Pack(filesToPack FilesToPack, outputFilename string) error {
 	finalFname, outputFile, err := writefile.New(outputFilename)
 	if err != nil {
@@ -47,8 +48,8 @@ func Pack(filesToPack FilesToPack, outputFilename string) error {
 
 	// write initial header (will rewrite offset/length when known)
 	hdr := &packed.Header{
-		Magic:           123,
-		Version:         1,
+		Magic:           packed.Magic,
+		Version:         packed.VersionInitial,
 		DirectoryOffset: 1,
 		DirectoryLength: 1,
 	}
@@ -117,7 +118,6 @@ func packOne(packer *packWriter, fileToPack FileToPack) (info packed.File, err e
 	}
 	defer unix.Munmap(data)
 
-	// TODO: content-type, etag
 	info.Etag = etag(data)
 	info.ContentType = fileToPack.ContentType
 	if info.ContentType == "" {
@@ -283,6 +283,8 @@ func (pw *packWriter) CopyFrom(in *os.File) (uint64, error) {
 		return 0, pw.err
 	}
 
+	fmt.Fprintf(os.Stderr, "[DEBUG] in size=%d\n", fi.Size())
+
 	var off int64
 	remain := fi.Size()
 	for remain > 0 {
@@ -294,8 +296,9 @@ func (pw *packWriter) CopyFrom(in *os.File) (uint64, error) {
 		}
 
 		amt, err = unix.Sendfile(int(pw.f.Fd()), int(in.Fd()), &off, amt)
+		fmt.Fprintf(os.Stderr, "[DEBUG]   sendfile=%d [off now %d]\n", amt, off)
 		remain -= int64(amt)
-		off += int64(amt)
+		//off += int64(amt)
 		if err != nil {
 			pw.err = err
 			return uint64(off), pw.err

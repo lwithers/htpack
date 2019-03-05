@@ -9,13 +9,14 @@ import (
 )
 
 func main() {
-	if err := run(); err != nil {
+	//if err := dopack(); err != nil {
+	if err := Inspect("out.htpack"); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func run() error {
+func dopack() error {
 	raw, err := ioutil.ReadFile("in.yaml")
 	if err != nil {
 		return err

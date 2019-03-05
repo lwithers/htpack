@@ -1,7 +1,7 @@
 # HTTP resource pack server
 
 A common scenario is that you have a set of static resources that you want to
-server up quickly via HTTP (for example: stylesheets, WASM).
+serve up quickly via HTTP (for example: stylesheets, WASM).
 
 This package provides a `net/http`-compatible `http.Handler` to do so, with
 support for:
@@ -20,4 +20,3 @@ The workflow is as follows:
 Only the minimal header processing necessary for correctness (Content-Length,
 etc.) is carried out by `htpack.Handler`; the handler can be combined with
 middleware for further processing (adding headers, `http.StripPrefix`, etc.).
-
