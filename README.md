@@ -13,10 +13,8 @@ support for:
 - ranges
 
 The workflow is as follows:
-- build YAML file describing files to serve
+- (optional) build YAML file describing files to serve
 - run htpacker tool to produce a single .htpack file
 - create `htpack.Handler` pointing at .htpack file
 
-Only the minimal header processing necessary for correctness (Content-Length,
-etc.) is carried out by `htpack.Handler`; the handler can be combined with
-middleware for further processing (adding headers, `http.StripPrefix`, etc.).
+The handler can easily be combined with middleware (`http.StripPrefix` etc.).
