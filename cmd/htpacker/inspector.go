@@ -1,11 +1,34 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/lwithers/htpack/internal/packed"
+	"github.com/spf13/cobra"
 )
+
+var inspectCmd = &cobra.Command{
+	Use:   "inspect",
+	Short: "View contents of an htpack file",
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) == 0 {
+			return errors.New("must specify one or more files")
+		}
+
+		var exitCode int
+		for _, filename := range args {
+			if err := Inspect(filename); err != nil {
+				fmt.Fprintf(os.Stderr, "%s: %v\n",
+					filename, err)
+				exitCode = 1
+			}
+		}
+		os.Exit(exitCode)
+		return nil
+	},
+}
 
 // Inspect a packfile.
 //  TODO: verify etag; verify integrity of compressed data.

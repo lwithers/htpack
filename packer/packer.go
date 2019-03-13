@@ -1,4 +1,4 @@
-package main
+package packer
 
 import (
 	"bufio"
@@ -15,8 +15,6 @@ import (
 	"github.com/lwithers/htpack/internal/packed"
 	"github.com/lwithers/pkg/writefile"
 )
-
-// TODO: abandon packed version if no size saving
 
 var BrotliPath string = "brotli"
 
@@ -36,6 +34,20 @@ type packInfo struct {
 	present     bool
 	offset, len uint64
 }
+
+const (
+	// minCompressionSaving means we'll only use the compressed version of
+	// the file if it's at least this many bytes smaller than the original.
+	// Chosen somewhat arbitrarily; we have to add an HTTP header, and the
+	// decompression overhead is not zero.
+	minCompressionSaving = 128
+
+	// minCompressionFraction means we'll only use the compressed version of
+	// the file if it's at least (origSize>>minCompressionFraction) bytes
+	// smaller than the original. This is a guess at when the decompression
+	// overhead outweighs the time saved in transmission.
+	minCompressionFraction = 7 // i.e. files must be at least 1/128 smaller
+)
 
 // Pack a file.
 func Pack(filesToPack FilesToPack, outputFilename string) error {
@@ -70,7 +82,7 @@ func Pack(filesToPack FilesToPack, outputFilename string) error {
 
 	// write the directory
 	if m, err = dir.Marshal(); err != nil {
-		// TODO: decorate
+		err = fmt.Errorf("marshaling directory object: %v", err)
 		return err
 	}
 
@@ -78,7 +90,6 @@ func Pack(filesToPack FilesToPack, outputFilename string) error {
 	hdr.DirectoryOffset = packer.Pos()
 	hdr.DirectoryLength = uint64(len(m))
 	if _, err := packer.Write(m); err != nil {
-		// TODO: decorate
 		return err
 	}
 
@@ -113,7 +124,7 @@ func packOne(packer *packWriter, fileToPack FileToPack) (info packed.File, err e
 	data, err := unix.Mmap(int(f.Fd()), 0, int(fi.Size()),
 		unix.PROT_READ, unix.MAP_SHARED)
 	if err != nil {
-		// TODO: decorate
+		err = fmt.Errorf("mmap %s: %v", fileToPack.Filename, err)
 		return
 	}
 	defer unix.Munmap(data)
@@ -129,8 +140,7 @@ func packOne(packer *packWriter, fileToPack FileToPack) (info packed.File, err e
 		Offset: packer.Pos(),
 		Length: uint64(len(data)),
 	}
-	if _, err = packer.CopyFrom(f); err != nil {
-		// TODO: decorate
+	if _, err = packer.CopyFrom(f, fi); err != nil {
 		return
 	}
 	info.Uncompressed = fileData
@@ -147,11 +157,14 @@ func packOne(packer *packWriter, fileToPack FileToPack) (info packed.File, err e
 		fileData = &packed.FileData{
 			Offset: packer.Pos(),
 		}
-		fileData.Length, err = packOneGzip(packer, data)
+		fileData.Length, err = packOneGzip(packer, data,
+			info.Uncompressed.Length)
 		if err != nil {
 			return
 		}
-		info.Gzip = fileData
+		if fileData.Length > 0 {
+			info.Gzip = fileData
+		}
 	}
 
 	// brotli compression
@@ -162,11 +175,14 @@ func packOne(packer *packWriter, fileToPack FileToPack) (info packed.File, err e
 		fileData = &packed.FileData{
 			Offset: packer.Pos(),
 		}
-		fileData.Length, err = packOneBrotli(packer, fileToPack.Filename)
+		fileData.Length, err = packOneBrotli(packer,
+			fileToPack.Filename, info.Uncompressed.Length)
 		if err != nil {
 			return
 		}
-		info.Brotli = fileData
+		if fileData.Length > 0 {
+			info.Brotli = fileData
+		}
 	}
 
 	return
@@ -178,7 +194,8 @@ func etag(in []byte) string {
 	return fmt.Sprintf(`"1--%x"`, h.Sum(nil))
 }
 
-func packOneGzip(packer *packWriter, data []byte) (uint64, error) {
+func packOneGzip(packer *packWriter, data []byte, uncompressedSize uint64,
+) (uint64, error) {
 	// write via temporary file
 	tmpfile, err := ioutil.TempFile("", "")
 	if err != nil {
@@ -202,10 +219,11 @@ func packOneGzip(packer *packWriter, data []byte) (uint64, error) {
 	}
 
 	// copy into packfile
-	return packer.CopyFrom(tmpfile)
+	return packer.CopyIfSaving(tmpfile, uncompressedSize)
 }
 
-func packOneBrotli(packer *packWriter, filename string) (uint64, error) {
+func packOneBrotli(packer *packWriter, filename string, uncompressedSize uint64,
+) (uint64, error) {
 	// write via temporary file
 	tmpfile, err := ioutil.TempFile("", "")
 	if err != nil {
@@ -219,13 +237,12 @@ func packOneBrotli(packer *packWriter, filename string) (uint64, error) {
 		"--output", tmpfile.Name())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// TODO: decorate
-		_ = out
+		err = fmt.Errorf("brotli: %v (process reported: %s)", err, out)
 		return 0, err
 	}
 
 	// copy into packfile
-	return packer.CopyFrom(tmpfile)
+	return packer.CopyIfSaving(tmpfile, uncompressedSize)
 }
 
 type packWriter struct {
@@ -272,7 +289,7 @@ func (pw *packWriter) Pad() error {
 	return pw.err
 }
 
-func (pw *packWriter) CopyFrom(in *os.File) (uint64, error) {
+func (pw *packWriter) CopyIfSaving(in *os.File, uncompressedSize uint64) (uint64, error) {
 	if pw.err != nil {
 		return 0, pw.err
 	}
@@ -282,8 +299,22 @@ func (pw *packWriter) CopyFrom(in *os.File) (uint64, error) {
 		pw.err = err
 		return 0, pw.err
 	}
+	sz := uint64(fi.Size())
 
-	fmt.Fprintf(os.Stderr, "[DEBUG] in size=%d\n", fi.Size())
+	if sz+minCompressionSaving > uncompressedSize {
+		return 0, nil
+	}
+	if sz+(uncompressedSize>>minCompressionFraction) > uncompressedSize {
+		return 0, nil
+	}
+
+	return pw.CopyFrom(in, fi)
+}
+
+func (pw *packWriter) CopyFrom(in *os.File, fi os.FileInfo) (uint64, error) {
+	if pw.err != nil {
+		return 0, pw.err
+	}
 
 	var off int64
 	remain := fi.Size()
@@ -295,12 +326,11 @@ func (pw *packWriter) CopyFrom(in *os.File) (uint64, error) {
 			amt = int(remain)
 		}
 
-		amt, err = unix.Sendfile(int(pw.f.Fd()), int(in.Fd()), &off, amt)
-		fmt.Fprintf(os.Stderr, "[DEBUG]   sendfile=%d [off now %d]\n", amt, off)
+		amt, err := unix.Sendfile(int(pw.f.Fd()), int(in.Fd()), &off, amt)
 		remain -= int64(amt)
-		//off += int64(amt)
 		if err != nil {
-			pw.err = err
+			pw.err = fmt.Errorf("sendfile (copying data to "+
+				"htpack): %v", err)
 			return uint64(off), pw.err
 		}
 	}
