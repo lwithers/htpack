@@ -165,6 +165,7 @@ func (h *Handler) sendfile(w http.ResponseWriter, data *packed.FileData) {
 		h.copyfile(w, data)
 		return
 	}
+	defer tcp.Close()
 
 	rawsock, err := tcp.SyscallConn()
 	if err == nil {
