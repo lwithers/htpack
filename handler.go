@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"time"
@@ -102,7 +103,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	info := h.dir[req.URL.Path]
+	info := h.dir[path.Clean(req.URL.Path)]
 	if info == nil {
 		http.NotFound(w, req)
 		return
