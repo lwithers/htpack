@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
 	"github.com/lwithers/htpack/packer"
 	"github.com/spf13/cobra"
@@ -15,23 +16,54 @@ var packCmd = &cobra.Command{
 	Use:   "pack",
 	Short: "creates a packfile from a YAML spec or set of files/dirs",
 	RunE: func(c *cobra.Command, args []string) error {
-		spec, err := c.Flags().GetString("spec")
+		// convert "out" to an absolute path, so that it will still
+		// work after chdir
+		out, err := c.Flags().GetString("out")
+		if err != nil {
+			return err
+		}
+		out, err = filepath.Abs(out)
 		if err != nil {
 			return err
 		}
 
+		// if "spec" is present, convert to an absolute path
+		spec, err := c.Flags().GetString("spec")
+		if err != nil {
+			return err
+		}
+		if spec != "" {
+			spec, err = filepath.Abs(spec)
+			if err != nil {
+				return err
+			}
+		}
+
+		// chdir if required
+		chdir, err := c.Flags().GetString("chdir")
+		if err != nil {
+			return err
+		}
+		if chdir != "" {
+			if err = os.Chdir(chdir); err != nil {
+				return err
+			}
+		}
+
+		// if "spec" is not present, then we expect a list of input
+		// files, and we'll build a spec from them
 		if spec == "" {
 			if len(args) == 0 {
 				return errors.New("need --yaml, " +
 					"or one or more filenames")
 			}
-			err = PackFiles(c, args)
+			err = PackFiles(c, args, out)
 		} else {
 			if len(args) != 0 {
 				return errors.New("cannot specify files " +
 					"when using --yaml")
 			}
-			err = PackSpec(c, spec)
+			err = PackSpec(c, spec, out)
 		}
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -52,12 +84,15 @@ func init() {
 		"Change to directory before searching for input files")
 }
 
-func PackFiles(c *cobra.Command, args []string) error {
-	// TODO
-	return errors.New("not implemented yet")
+func PackFiles(c *cobra.Command, args []string, out string) error {
+	ftp, err := filesFromList(args)
+	if err != nil {
+		return err
+	}
+	return packer.Pack(ftp, out)
 }
 
-func PackSpec(c *cobra.Command, spec string) error {
+func PackSpec(c *cobra.Command, spec, out string) error {
 	raw, err := ioutil.ReadFile(spec)
 	if err != nil {
 		return err
@@ -68,8 +103,5 @@ func PackSpec(c *cobra.Command, spec string) error {
 		return fmt.Errorf("parsing YAML spec %s: %v", spec, err)
 	}
 
-	// TODO: chdir
-
-	out, _ := c.Flags().GetString("out")
 	return packer.Pack(ftp, out)
 }

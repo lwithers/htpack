@@ -18,7 +18,7 @@ arguments.`,
 
 func main() {
 	rootCmd.AddCommand(packCmd)
-	//rootCmd.AddCommand(yamlCmd)
+	rootCmd.AddCommand(yamlCmd)
 	rootCmd.AddCommand(inspectCmd)
 
 	if err := rootCmd.Execute(); err != nil {

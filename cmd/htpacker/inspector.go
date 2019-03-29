@@ -50,14 +50,20 @@ func Inspect(filename string) error {
 			fmt.Printf(" • %s\n"+
 				"    · Etag:         %s\n"+
 				"    · Content type: %s\n"+
-				"    · Uncompressed: %s (offset %d)\n"+
-				"    · Gzipped:      %s (offset %d)\n"+
-				"    · Brotli:       %s (offset %d)\n",
+				"    · Uncompressed: %s (offset %d)\n",
 				path, info.Etag, info.ContentType,
-				printSize(info.Uncompressed.Length), info.Uncompressed.Offset,
-				printSize(info.Gzip.Length), info.Gzip.Offset,
-				printSize(info.Brotli.Length), info.Brotli.Offset,
-			)
+				printSize(info.Uncompressed.Length),
+				info.Uncompressed.Offset)
+
+			if info.Gzip != nil {
+				fmt.Printf("    · Gzipped:      %s (offset %d)\n",
+					printSize(info.Gzip.Length), info.Gzip.Offset)
+			}
+
+			if info.Brotli != nil {
+				fmt.Printf("    · Brotli:       %s (offset %d)\n",
+					printSize(info.Brotli.Length), info.Brotli.Offset)
+			}
 		}
 	}
 	return err
