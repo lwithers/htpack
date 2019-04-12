@@ -12,7 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 
 	"github.com/foobaz/go-zopfli/zopfli"
-	"github.com/lwithers/htpack/internal/packed"
+	"github.com/lwithers/htpack/packed"
 	"github.com/lwithers/pkg/writefile"
 )
 

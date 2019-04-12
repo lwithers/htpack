@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lwithers/htpack/internal/packed"
+	"github.com/lwithers/htpack/packed"
 	"golang.org/x/sys/unix"
 )
 

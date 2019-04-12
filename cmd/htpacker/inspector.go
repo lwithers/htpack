@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lwithers/htpack/internal/packed"
+	"github.com/lwithers/htpack/packed"
 	"github.com/spf13/cobra"
 )
 

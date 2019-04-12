@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lwithers/htpack/packer"
+	"github.com/lwithers/htpack/cmd/htpacker/packer"
 	"github.com/spf13/cobra"
 	yaml "gopkg.in/yaml.v2"
 )
