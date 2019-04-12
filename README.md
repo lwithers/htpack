@@ -10,7 +10,7 @@ support for:
   - brotli, if you have the external compression binary available at pack time
   - does not yet support Transfer-Encoding, only Accept-Encoding/Content-Encoding
 - etags
-- ranges
+- ranges (TODO)
 
 The workflow is as follows:
 - (optional) build YAML file describing files to serve
