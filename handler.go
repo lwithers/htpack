@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -82,6 +83,28 @@ func (h *Handler) SetHeader(key, value string) {
 		delete(h.headers, key)
 	} else {
 		h.headers[key] = value
+	}
+}
+
+// SetIndex allows setting an index.html (or equivalent) that can be used to
+// serve requests landing at a directory. For instance, if a file named
+// "/foo/index.html" exists, and this function is called with "index.html",
+// then a route will be registered to serve the contents of this file at
+// "/foo". Noting that the ServeHTTP handler discards a trailing "/" on non
+// root URLs, this means that it will serve equivalent content for requests
+// to "/foo/index.html", "/foo/" and "/foo".
+//
+// Existing routes are not overwritten, and this function could be called
+// multiple times with different filenames (noting later calls would not
+// overwrite files matching earlier calls).
+func (h *Handler) SetIndex(filename string) {
+	for k, v := range h.dir {
+		if filepath.Base(k) == filename {
+			routeToAdd := filepath.Dir(k)
+			if _, exists := h.dir[routeToAdd]; !exists {
+				h.dir[routeToAdd] = v
+			}
+		}
 	}
 }
 
