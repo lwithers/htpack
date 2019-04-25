@@ -111,7 +111,7 @@ func run(c *cobra.Command, args []string) error {
 		return err
 	}
 	if expiry <= 0 {
-		extraHeaders.Set("Cache-Control", "no-store")
+		extraHeaders.Set("Cache-Control", "no-cache")
 	} else {
 		extraHeaders.Set("Cache-Control",
 			fmt.Sprintf("public, max-age=%d", expiry/1e9))
