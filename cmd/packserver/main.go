@@ -45,6 +45,8 @@ func main() {
 		"Extra headers; use flag once for each, in form -H header=value")
 	rootCmd.Flags().String("header-file", "",
 		"Path to text file containing one line for each header=value to add")
+	rootCmd.Flags().String("index-file", "",
+		"Name of index file (index.html or similar)")
 	rootCmd.Flags().Duration("expiry", 0,
 		"Tell client how long it can cache data for; 0 means no caching")
 
@@ -115,6 +117,13 @@ func run(c *cobra.Command, args []string) error {
 			fmt.Sprintf("public, max-age=%d", expiry/1e9))
 	}
 
+	// optional index file
+	//  NB: this is set below, as the handlers are instantiated
+	indexFile, err := c.Flags().GetString("index-file")
+	if err != nil {
+		return err
+	}
+
 	// verify .htpack specifications
 	if len(args) == 0 {
 		return errors.New("must specify one or more .htpack files")
@@ -141,15 +150,17 @@ func run(c *cobra.Command, args []string) error {
 
 	// load packfiles, registering handlers as we go
 	for prefix, packfile := range packPaths {
-		var handler http.Handler
-		handler, err = htpack.New(packfile)
+		packHandler, err := htpack.New(packfile)
 		if err != nil {
 			return err
 		}
+		if indexFile != "" {
+			packHandler.SetIndex(indexFile)
+		}
 
-		handler = &addHeaders{
+		handler := &addHeaders{
 			extraHeaders: extraHeaders,
-			handler:      handler,
+			handler:      packHandler,
 		}
 
 		if prefix != "/" {

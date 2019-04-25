@@ -9,6 +9,8 @@ github.com/lwithers/htpack v0.0.0-20190412081623-ea77f42dc393 h1:h++VdZ2eeJC9hf+
 github.com/lwithers/htpack v0.0.0-20190412081623-ea77f42dc393/go.mod h1:+9noAoJ9IIiHkwn2Z2Po5upZOKItKKFgYr/cMESGYrc=
 github.com/lwithers/htpack v1.0.0 h1:opBavUAl6QKjvlxNaOwMAvO+Q+ytZpKSl0iDCYam1Uk=
 github.com/lwithers/htpack v1.0.0/go.mod h1:4dNHChTcK0SzOTVnFt4b0SuK7OMSo8Ge7o1XXYV4xUk=
+github.com/lwithers/htpack v1.1.0 h1:pURTwBKgcmLYpN8M+qT9/Ks2+kLy8cbQqgJZa6/QPaw=
+github.com/lwithers/htpack v1.1.0/go.mod h1:4dNHChTcK0SzOTVnFt4b0SuK7OMSo8Ge7o1XXYV4xUk=
 github.com/spf13/cobra v0.0.3 h1:ZlrZ4XsMRm04Fr5pSFxBgfND2EBVa1nLpiy1stUsX/8=
 github.com/spf13/cobra v0.0.3/go.mod h1:1l0Ry5zgKvJasoi3XT1TypsSe7PqH0Sj9dhYf7v3XqQ=
 github.com/spf13/pflag v1.0.3 h1:zPAT6CGy6wXeQ7NtTnaTerfKOsV6V6F8agHXFiazDkg=
