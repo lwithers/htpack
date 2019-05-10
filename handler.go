@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/lwithers/htpack/packed"
@@ -193,6 +194,19 @@ func (h *Handler) sendfile(w http.ResponseWriter, data *packed.FileData) {
 	rawsock, err := tcp.SyscallConn()
 	if err == nil {
 		err = buf.Flush()
+	}
+	if err == nil {
+		// Since we're bypassing Read / Write, there is no integration
+		// with Go's epoll-driven event handling for this file
+		// descriptor. We'll therefore get EAGAIN behaviour rather
+		// than blocking for Sendfile(). Work around this by setting
+		// the file descriptor to blocking mode; since this function
+		// now guarantees (via defer tcp.Close()) that the connection
+		// will be closed and not be passed back to Go's own event
+		// loop, this is safe to do.
+		rawsock.Control(func(outfd uintptr) {
+			err = syscall.SetNonblock(int(outfd), false)
+		})
 	}
 	if err != nil {
 		// error only returned if the underlying connection is broken,
