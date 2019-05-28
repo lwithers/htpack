@@ -1,6 +1,7 @@
 package htpack
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -195,28 +196,18 @@ func (h *Handler) sendfile(w http.ResponseWriter, data *packed.FileData) {
 	if err == nil {
 		err = buf.Flush()
 	}
-	if err == nil {
-		// Since we're bypassing Read / Write, there is no integration
-		// with Go's epoll-driven event handling for this file
-		// descriptor. We'll therefore get EAGAIN behaviour rather
-		// than blocking for Sendfile(). Work around this by setting
-		// the file descriptor to blocking mode; since this function
-		// now guarantees (via defer tcp.Close()) that the connection
-		// will be closed and not be passed back to Go's own event
-		// loop, this is safe to do.
-		rawsock.Control(func(outfd uintptr) {
-			err = syscall.SetNonblock(int(outfd), false)
-		})
-	}
 	if err != nil {
 		// error only returned if the underlying connection is broken,
 		// so there's no point calling sendfile
 		return
 	}
 
+	var breakErr error
 	off := int64(data.Offset)
 	remain := data.Length
-	for remain > 0 {
+
+	for breakErr == nil && remain > 0 {
+		// sendfile(2) can send a maximum of 1GiB
 		var amt int
 		if remain > (1 << 30) {
 			amt = (1 << 30)
@@ -224,15 +215,31 @@ func (h *Handler) sendfile(w http.ResponseWriter, data *packed.FileData) {
 			amt = int(remain)
 		}
 
-		// TODO: outer error handling
-
-		rawsock.Control(func(outfd uintptr) {
-			amt, err = unix.Sendfile(int(outfd), int(h.f.Fd()), &off, amt)
+		// behaviour of control function:
+		//  · some bytes written: sets written > 0, returns true (breaks
+		//                        out of loop on first write)
+		//  · EAGAIN: returns false (causes Write() to loop until
+		//            success or permanent failure)
+		//  · other error: sets breakErr
+		var written int
+		rawsock.Write(func(outfd uintptr) bool {
+			fmt.Fprintf(os.Stderr, "[DEBUG] sendfile(%d, %d, %d, %d) = ",
+				outfd, h.f.Fd(), off, amt)
+			written, err = unix.Sendfile(int(outfd), int(h.f.Fd()), &off, amt)
+			fmt.Fprintf(os.Stderr, "(%d, %v); off now %d\n", written, err, off)
+			switch err {
+			case nil:
+				return true
+			case syscall.EAGAIN:
+				return false
+			default:
+				breakErr = err
+				return true
+			}
 		})
-		remain -= uint64(amt)
-		if err != nil {
-			return
-		}
+
+		// we may have had a partial write, or file may have been > 1GiB
+		remain -= uint64(written)
 	}
 }
 
