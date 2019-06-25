@@ -143,6 +143,8 @@ func filesFromListR(prefix, arg string, ftp packer.FilesToPack) error {
 				ctype = "application/javascript"
 			case ".json":
 				ctype = "application/json"
+			case ".svg":
+				ctype = "image/svg+xml"
 			}
 
 		case strings.HasPrefix(ctype, "text/xml"):
