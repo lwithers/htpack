@@ -1,7 +1,6 @@
 package htpack
 
 import (
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -223,10 +222,7 @@ func (h *Handler) sendfile(w http.ResponseWriter, data *packed.FileData) {
 		//  · other error: sets breakErr
 		var written int
 		rawsock.Write(func(outfd uintptr) bool {
-			fmt.Fprintf(os.Stderr, "[DEBUG] sendfile(%d, %d, %d, %d) = ",
-				outfd, h.f.Fd(), off, amt)
 			written, err = unix.Sendfile(int(outfd), int(h.f.Fd()), &off, amt)
-			fmt.Fprintf(os.Stderr, "(%d, %v); off now %d\n", written, err, off)
 			switch err {
 			case nil:
 				return true
