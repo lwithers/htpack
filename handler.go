@@ -1,6 +1,7 @@
 package htpack
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -137,6 +138,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	w.Header().Set("Vary", "Accept-Encoding")
 	w.Header().Set("Etag", info.Etag)
 	w.Header().Set("Content-Type", info.ContentType)
+	w.Header().Set("Accept-Ranges", "bytes")
 
 	// process etag / modtime
 	if clientHasCachedVersion(info.Etag, h.startTime, req) {
@@ -155,38 +157,50 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Encoding", encodingGzip)
 	}
 
-	// TODO: Range
+	// range support (single-part ranges only)
+	// https://developer.mozilla.org/en-US/docs/Web/HTTP/Range_requests#Single_part_ranges
+	offset, length, isPartial := getFileRange(data, req)
+	if isPartial {
+		w.Header().Set("Content-Range", fmt.Sprintf("bytes %d-%d/%d",
+			offset, offset+length-1, data.Length))
+	}
 
 	// now we know exactly what we're writing, finalise HTTP header
-	w.Header().Set("Content-Length", strconv.FormatUint(data.Length, 10))
-	w.WriteHeader(http.StatusOK)
+	w.Header().Set("Content-Length", strconv.FormatUint(length, 10))
+	if isPartial {
+		w.WriteHeader(http.StatusPartialContent)
+	} else {
+		w.WriteHeader(http.StatusOK)
+	}
 
 	// send body (though not for HEAD)
 	if req.Method == "HEAD" {
 		return
 	}
-	h.sendfile(w, data)
+	h.sendfile(w, data, offset, length)
 }
 
-func (h *Handler) sendfile(w http.ResponseWriter, data *packed.FileData) {
+func (h *Handler) sendfile(w http.ResponseWriter, data *packed.FileData,
+	offset, length uint64,
+) {
 	hj, ok := w.(http.Hijacker)
 	if !ok {
 		// fallback
-		h.copyfile(w, data)
+		h.copyfile(w, data, offset, length)
 		return
 	}
 
 	conn, buf, err := hj.Hijack()
 	if err != nil {
 		// fallback
-		h.copyfile(w, data)
+		h.copyfile(w, data, offset, length)
 		return
 	}
 
 	tcp, ok := conn.(*net.TCPConn)
 	if !ok {
 		// fallback
-		h.copyfile(w, data)
+		h.copyfile(w, data, offset, length)
 		return
 	}
 	defer tcp.Close()
@@ -202,8 +216,8 @@ func (h *Handler) sendfile(w http.ResponseWriter, data *packed.FileData) {
 	}
 
 	var breakErr error
-	off := int64(data.Offset)
-	remain := data.Length
+	off := int64(data.Offset + offset)
+	remain := length
 
 	for breakErr == nil && remain > 0 {
 		// sendfile(2) can send a maximum of 1GiB
@@ -239,8 +253,13 @@ func (h *Handler) sendfile(w http.ResponseWriter, data *packed.FileData) {
 	}
 }
 
-func (h *Handler) copyfile(w http.ResponseWriter, data *packed.FileData) {
-	w.Write(h.mapped[data.Offset : data.Offset+data.Length])
+// copyfile is a fallback handler that uses write(2) on our memory-mapped data
+// to push out the response.
+func (h *Handler) copyfile(w http.ResponseWriter, data *packed.FileData,
+	offset, length uint64,
+) {
+	offset += data.Offset
+	w.Write(h.mapped[offset : offset+length])
 }
 
 func acceptedEncodings(req *http.Request) (gzip, brotli bool) {
@@ -282,4 +301,46 @@ func clientHasCachedVersion(etag string, startTime time.Time, req *http.Request,
 		return false
 	}
 	return cachedTime.After(startTime)
+}
+
+// getFileRange returns the byte offset and length of the file to serve, along
+// with whether or not it's partial content.
+func getFileRange(data *packed.FileData, req *http.Request) (offset, length uint64, isPartial bool) {
+	length = data.Length
+
+	// only accept "Range: bytes=…"
+	r := req.Header.Get("Range")
+	if !strings.HasPrefix(r, "bytes=") {
+		return
+	}
+	r = strings.TrimPrefix(r, "bytes=")
+
+	// only accept a single range, "from-to", mapping to interval [from,to]
+	pos := strings.IndexByte(r, '-')
+	if pos == -1 {
+		return
+	}
+	sfrom, sto := r[:pos], r[pos+1:]
+	from, err := strconv.ParseUint(sfrom, 10, 64)
+	if err != nil {
+		return
+	}
+	to, err := strconv.ParseUint(sto, 10, 64)
+	if err != nil {
+		return
+	}
+
+	// validate the interval lies within the file
+	switch {
+	case from > to,
+		from >= data.Length,
+		to >= data.Length:
+		return
+	}
+
+	// all good
+	offset = from
+	length = to - from + 1
+	isPartial = true
+	return
 }
