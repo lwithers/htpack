@@ -233,8 +233,7 @@ func packOneBrotli(packer *packWriter, filename string, uncompressedSize uint64,
 	defer tmpfile.Close()
 
 	// compress via commandline
-	cmd := exec.Command(BrotliPath, "--input", filename,
-		"--output", tmpfile.Name())
+	cmd := exec.Command(BrotliPath, filename, "--output", tmpfile.Name())
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		err = fmt.Errorf("brotli: %v (process reported: %s)", err, out)
